@@ -21,7 +21,10 @@ jobs:
     timeout-minutes: 350    
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Code (with LFS)
+      uses: actions/checkout@v3
+      with:
+        lfs: true  # 👈 YEH FIX HAI: Isse asli database file download hogi
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -42,6 +45,5 @@ jobs:
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         CHAT_ID: ${{ secrets.CHAT_ID }}
         COOKIES_JSON: ${{ secrets.COOKIES_JSON }}
-        PYTHONUNBUFFERED: "1" # 🔥 Ye line logs ko instant aur proper dikhayegi
       run: |
         python db_stock_monitor.py
