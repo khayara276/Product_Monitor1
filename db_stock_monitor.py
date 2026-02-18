@@ -32,19 +32,19 @@ DB_PATH = os.path.join('data', 'shein_products.db')
 
 HEADLESS_MODE = True 
 
-# 🔥 HIGH SPEED CONFIG (POLYMORPHIC MODE)
-# 20-25 threads are safe ONLY if we rotate fingerprints (impersonate)
-NUM_THREADS = 25         
-BATCH_SIZE = 25         
-CYCLE_DELAY = 1         
+# 🔥 TURBO MODE CONFIGURATION
+# 50 Threads + Polymorphic Rotation = Max Speed
+NUM_THREADS = 50         
+BATCH_SIZE = 50         
+CYCLE_DELAY = 0.1       
 
 PRIORITY_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "28", "30", "32", "34", "36"]
 
-# List of browser fingerprints to rotate
+# Massive list of fingerprints to rotate (Confuse the firewall)
 BROWSER_FINGERPRINTS = [
-    "chrome110", "chrome119", "chrome120", 
+    "chrome100", "chrome110", "chrome119", "chrome120", "chrome124",
     "edge99", "edge101", 
-    "safari15_3"
+    "safari15_3", "safari17_0"
 ]
 
 # ==========================================
@@ -74,7 +74,7 @@ def send_telegram(message, image_url=None, button_url=None):
     except Exception: pass
 
 # ==========================================
-# 🚀 DB MONITOR CLASS (POLYMORPHIC EDITION)
+# 🚀 DB MONITOR CLASS (TURBO EDITION)
 # ==========================================
 
 class DBStockMonitor:
@@ -92,7 +92,7 @@ class DBStockMonitor:
         self.error_streak = 0
         self.consecutive_success = 0
         
-        # Use Python Mode primarily for speed
+        # Always prefer Python mode for speed
         self.use_python_mode = True 
         
         self.init_database()
@@ -175,11 +175,11 @@ class DBStockMonitor:
         conn.close()
         return [row for row in rows if row[0] not in self.ignore_list]
 
-    # --- POLYMORPHIC FETCHING ENGINE ---
+    # --- TURBO FETCHING ENGINE ---
     def hybrid_fetch_batch(self, pids):
-        # Adaptive Backoff: If errors are high, slow down
-        if self.error_streak > 5:
-            time.sleep(2) # Cool down
+        # Only slow down if we hit MAJOR blocks
+        if self.error_streak > 10:
+            time.sleep(1) # Brief cool down
             
         if self.use_python_mode:
             return self.fetch_batch_stealth(pids)
@@ -191,26 +191,23 @@ class DBStockMonitor:
         forbidden_count = 0
         
         def fetch_one(pid):
-            # Dynamic Delay based on health
-            base_delay = 0.1 if self.error_streak == 0 else 1.0
-            time.sleep(random.uniform(base_delay, base_delay + 0.5))
+            # 🔥 TURBO: Micro-delay only (0.01s - 0.1s)
+            # This is extremely fast but relies on fingerprint rotation to stay safe
+            time.sleep(random.uniform(0.01, 0.1))
             
             try:
-                # 🔥 POLYMORPHISM: Rotate Browser Fingerprint PER REQUEST
-                # This prevents the server from linking all requests to one "session"
                 fingerprint = random.choice(BROWSER_FINGERPRINTS)
-                
                 url = f"https://sheinindia.ajio.com/api/p/{pid}?fields=SITE"
                 
-                # Create a fresh one-off request (No session reuse = Safer)
                 res = crequests.get(
                     url, 
                     impersonate=fingerprint,
                     headers={
                         'Referer': 'https://sheinindia.ajio.com/',
-                        'Accept-Language': 'en-US,en;q=0.9'
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Cache-Control': 'no-cache'
                     },
-                    timeout=10
+                    timeout=5 # Fail fast
                 )
                 
                 if res.status_code == 200:
@@ -228,18 +225,19 @@ class DBStockMonitor:
                 results.append(res)
                 if res['status'] == 403: forbidden_count += 1
 
-        # Adaptive Logic
-        if forbidden_count > 2:
+        # Turbo Logic: Higher tolerance for errors before switching
+        if forbidden_count > 5:
             self.error_streak += 1
             self.consecutive_success = 0
-            print(f"   ⚠️ High 403 Rate ({forbidden_count}). Cooling down...", flush=True)
-            if self.error_streak > 3:
-                # If consistently blocked, fallback to browser for a bit
+            print(f"   ⚠️ 403 Spike ({forbidden_count}).", flush=True)
+            if self.error_streak > 5:
+                # Only switch if persistently blocked
+                print("   🔻 Switching to Slow Mode...", flush=True)
                 self.use_python_mode = False
         else:
             self.consecutive_success += 1
-            if self.consecutive_success > 5:
-                self.error_streak = 0 # Reset error streak if we are doing well
+            if self.consecutive_success > 3:
+                self.error_streak = 0
         
         return results
 
@@ -253,7 +251,7 @@ class DBStockMonitor:
                 async function fetchAll() {{
                     const results = [];
                     for (const pid of pids) {{
-                        await wait(200); // Fast delay in browser
+                        await wait(100); // 0.1s delay in browser (Faster)
                         try {{
                             const res = await fetch(`https://sheinindia.ajio.com/api/p/${{pid}}?fields=SITE`);
                             if(res.status === 403) {{ results.push({{id: pid, status: 403}}); break; }}
@@ -270,9 +268,9 @@ class DBStockMonitor:
             result_str = self.browser.latest_tab.run_js(js_code, timeout=60)
             if result_str: 
                 results = json.loads(result_str)
-                # If browser works well, try switching back to python mode for speed
+                # Try to switch back to Turbo Mode ASAP
                 if len(results) > 0 and not any(r['status'] == 403 for r in results):
-                     if random.random() < 0.3: self.use_python_mode = True
+                     self.use_python_mode = True
                 return results
         except: pass
         return []
@@ -300,13 +298,12 @@ class DBStockMonitor:
                         self.processed_count += len(batch_items)
                         pct = (self.processed_count / self.total_products) * 100 if self.total_products else 0
                         mode_icon = "⚡" if self.use_python_mode else "🐢"
-                        if self.processed_count % 100 < BATCH_SIZE: 
-                            print(f"   {mode_icon} Speed: {self.processed_count}/{self.total_products} ({pct:.1f}%)", end='\r', flush=True)
+                        if self.processed_count % 200 < BATCH_SIZE: 
+                            print(f"   {mode_icon} Turbo: {self.processed_count}/{self.total_products} ({pct:.1f}%)", end='\r', flush=True)
 
                 finally:
                     self.batch_queue.task_done()
-                    # Minimal delay for max speed
-                    time.sleep(0.1)
+                    time.sleep(0.01)
 
             except Exception: pass
 
@@ -385,13 +382,13 @@ class DBStockMonitor:
 
     def start(self):
         print("="*60, flush=True)
-        print("🚀 SHEIN MONITOR: POLYMORPHIC SPEED EDITION", flush=True)
+        print("🚀 SHEIN MONITOR: TURBO SPEED EDITION", flush=True)
         print(f"📦 Batch Size: {BATCH_SIZE} | Workers: {NUM_THREADS}", flush=True)
         print("="*60, flush=True)
 
         threading.Thread(target=self.auto_cleaner, daemon=True).start()
 
-        print(f"\n🧵 Launching {NUM_THREADS} Polymorphic Workers...", flush=True)
+        print(f"\n🧵 Launching {NUM_THREADS} Turbo Workers...", flush=True)
         for _ in range(NUM_THREADS):
             t = threading.Thread(target=self.worker_loop, daemon=True)
             t.start()
