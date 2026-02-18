@@ -38,7 +38,7 @@ NUM_THREADS = 50
 BATCH_SIZE = 50         
 CYCLE_DELAY = 0.1       
 
-PRIORITY_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "28", "30", "32", "34", "36"]
+PRIORITY_SIZES = ["M", "L", "XL", "32", "34", "36"]
 
 # Massive list of fingerprints to rotate (Confuse the firewall)
 BROWSER_FINGERPRINTS = [
