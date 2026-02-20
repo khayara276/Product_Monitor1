@@ -9,17 +9,20 @@ import sqlite3
 import concurrent.futures
 import sys
 import subprocess
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import re  # Added missing regex module
 
 # Check for stealth library
 try:
     from curl_cffi import requests as crequests
 except ImportError:
-    print("❌ curl_cffi missing! Install it.")
+    print("❌ curl_cffi missing! Install it using: pip install curl_cffi")
     sys.exit(1)
 
-from DrissionPage import ChromiumPage, ChromiumOptions
+try:
+    from DrissionPage import ChromiumPage, ChromiumOptions
+except ImportError:
+    print("❌ DrissionPage missing! Install it using: pip install DrissionPage")
+    sys.exit(1)
 
 # ==========================================
 # ⚙️ CONFIGURATION (ENV VARS)
@@ -36,7 +39,7 @@ HEADLESS_MODE = True
 # 50 Threads + Polymorphic Rotation = Max Speed
 NUM_THREADS = 50         
 BATCH_SIZE = 50         
-CYCLE_DELAY = 0.1       
+CYCLE_DELAY = 0.1        
 
 PRIORITY_SIZES = ["M", "L", "XL", "32", "34", "36"]
 
@@ -52,17 +55,21 @@ BROWSER_FINGERPRINTS = [
 # ==========================================
 
 def send_telegram(message, image_url=None, button_url=None):
-    if not TELEGRAM_TOKEN or not CHAT_ID: return
+    if not TELEGRAM_TOKEN or not CHAT_ID: 
+        return
+        
     try:
         payload = {
             "chat_id": CHAT_ID,
             "parse_mode": "HTML",
             "disable_web_page_preview": False
         }
+        
         if button_url:
             payload["reply_markup"] = json.dumps({
                 "inline_keyboard": [[{"text": "🛍️ BUY NOW", "url": button_url}]]
             })
+            
         if image_url:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
             payload["photo"] = image_url
@@ -70,8 +77,10 @@ def send_telegram(message, image_url=None, button_url=None):
         else:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
             payload["text"] = message
+            
         requests.post(url, data=payload, timeout=10)
-    except Exception: pass
+    except Exception as e: 
+        print(f"⚠️ Telegram Error: {e}")
 
 # ==========================================
 # 🚀 DB MONITOR CLASS (TURBO EDITION)
@@ -98,7 +107,8 @@ class DBStockMonitor:
         self.init_database()
 
     def init_database(self):
-        if not os.path.exists('data'): os.makedirs('data')
+        if not os.path.exists('data'): 
+            os.makedirs('data')
         
         if os.path.exists(DB_PATH):
             try:
@@ -110,8 +120,8 @@ class DBStockMonitor:
                     try:
                         subprocess.run(["git", "lfs", "pull"], check=True)
                         print("✅ LFS Pull Successful!", flush=True)
-                    except Exception:
-                        print("❌ LFS Pull Failed. Ensure workflow has 'lfs: true'.", flush=True)
+                    except Exception as e:
+                        print(f"❌ LFS Pull Failed. Ensure workflow has 'lfs: true'. Error: {e}", flush=True)
                         sys.exit(1)
 
                 with open(DB_PATH, 'rb') as f:
@@ -144,14 +154,14 @@ class DBStockMonitor:
             # Updated Regex: Ye ab Hyphen (-), Underscore (_), W aur H sab handle karega
             # Example: '-286Wx359H-' ya '_473x593' ko puri tarah hata dega
             clean_url = re.sub(r'[-_]?\d+[Ww]?x\d+[Hh]?[-_]?', '', raw_url)
-            
             clean_url = clean_url.replace('_thumbnail', '')
             
             if 'ajio.com' in clean_url: 
                 clean_url = clean_url.split('?')[0]
                 
             return clean_url
-        except: 
+        except Exception as e: 
+            print(f"Regex error on URL: {raw_url} - {e}")
             return raw_url
 
     def get_browser_options(self, port):
@@ -172,7 +182,8 @@ class DBStockMonitor:
             co = self.get_browser_options(port)
             self.browser = ChromiumPage(co)
             return True
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Browser Init Failed: {e}")
             return False
 
     def get_all_products(self):
@@ -223,7 +234,7 @@ class DBStockMonitor:
                 elif res.status_code == 403:
                     return {'id': pid, 'status': 403}
                 return {'id': pid, 'status': 'ERR'}
-            except:
+            except Exception:
                 return {'id': pid, 'status': 'ERR'}
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
@@ -231,13 +242,14 @@ class DBStockMonitor:
             for future in concurrent.futures.as_completed(future_to_pid):
                 res = future.result()
                 results.append(res)
-                if res['status'] == 403: forbidden_count += 1
+                if res['status'] == 403: 
+                    forbidden_count += 1
 
         # Turbo Logic: Higher tolerance for errors before switching
         if forbidden_count > 5:
             self.error_streak += 1
             self.consecutive_success = 0
-            print(f"   ⚠️ 403 Spike ({forbidden_count}).", flush=True)
+            print(f"\n   ⚠️ 403 Spike ({forbidden_count}).", flush=True)
             if self.error_streak > 5:
                 # Only switch if persistently blocked
                 print("   🔻 Switching to Slow Mode...", flush=True)
@@ -280,7 +292,8 @@ class DBStockMonitor:
                 if len(results) > 0 and not any(r['status'] == 403 for r in results):
                      self.use_python_mode = True
                 return results
-        except: pass
+        except Exception as e: 
+            print(f"⚠️ Browser Fetch Error: {e}")
         return []
 
     def worker_loop(self):
@@ -313,7 +326,9 @@ class DBStockMonitor:
                     self.batch_queue.task_done()
                     time.sleep(0.01)
 
-            except Exception: pass
+            except Exception as e: 
+                # Prevents silent crashes in thread loop
+                time.sleep(1)
 
     def process_product(self, pid, data, old_name):
         try:
@@ -331,8 +346,10 @@ class DBStockMonitor:
                 if size:
                     status = v.get('stock', {}).get('stockLevelStatus', '')
                     qty = v.get('stock', {}).get('stockLevel', 0)
-                    if status in ['inStock', 'lowStock']: current_stock[size] = qty
-                    else: current_stock[size] = 0
+                    if status in ['inStock', 'lowStock']: 
+                        current_stock[size] = qty
+                    else: 
+                        current_stock[size] = 0
 
             current_sig = ",".join([f"{k}:{v}" for k, v in sorted(current_stock.items())])
             last_sig = self.stock_cache.get(pid)
@@ -357,7 +374,9 @@ class DBStockMonitor:
 
             if should_alert:
                 raw_img_url = data.get('selected', {}).get('modelImage', {}).get('url')
-                if not raw_img_url and 'images' in data and data['images']: raw_img_url = data['images'][0].get('url')
+                if not raw_img_url and 'images' in data and data['images']: 
+                    raw_img_url = data['images'][0].get('url')
+                    
                 hd_img_url = self.get_clean_image_url(raw_img_url)
                 buy_url = f"https://www.sheinindia.in/p/{pid}"
                 
@@ -372,17 +391,19 @@ class DBStockMonitor:
                     f"📏 <b>Full Stock:</b>\n<pre>{all_sizes_text}</pre>\n\n"
                     f"🔗 <a href='{buy_url}'>Check on Shein</a>"
                 )
-                print(f"🔔 Alert Sent: {name}", flush=True)
+                print(f"\n🔔 Alert Sent: {name}", flush=True)
                 send_telegram(msg, image_url=hd_img_url, button_url=buy_url)
                 self.ignore_list.add(pid)
 
-        except Exception as e: pass
+        except Exception as e: 
+            pass # Skip individual product errors silently to maintain speed
 
     def auto_cleaner(self):
         while self.running:
             wait_time = 6 * 3600 
             print(f"\n⏰ Cleaner scheduled in 6 hours...", flush=True)
             time.sleep(wait_time)
+            
             with self.lock:
                 self.ignore_list.clear()
                 self.stock_cache.clear()
@@ -412,8 +433,9 @@ class DBStockMonitor:
                 print(f"\n🔄 Cycle #{cycle}: Scanning {self.total_products} products...", flush=True)
                 
                 if self.total_products == 0:
-                    print("⚠️ DB is empty.", flush=True)
-                    time.sleep(60); continue
+                    print("⚠️ DB is empty. Waiting for products...", flush=True)
+                    time.sleep(60)
+                    continue
 
                 for i in range(0, len(all_products), BATCH_SIZE):
                     batch = all_products[i:i + BATCH_SIZE]
@@ -425,8 +447,10 @@ class DBStockMonitor:
                 time.sleep(CYCLE_DELAY)
                 
         except KeyboardInterrupt:
+            print("\n🛑 Shutting down safely...", flush=True)
             self.running = False
-            if self.browser: self.browser.quit()
+            if self.browser: 
+                self.browser.quit()
 
 if __name__ == "__main__":
     monitor = DBStockMonitor()
