@@ -138,13 +138,21 @@ class DBStockMonitor:
         conn.commit()
         conn.close()
 
-    def get_clean_image_url(self, raw_url):
+     def get_clean_image_url(self, raw_url):
         if not raw_url: return None
         try:
-            clean_url = re.sub(r'_\d+x\d+', '', raw_url).replace('_thumbnail', '')
-            if 'ajio.com' in clean_url: clean_url = clean_url.split('?')[0]
+            # Updated Regex: Ye ab Hyphen (-), Underscore (_), W aur H sab handle karega
+            # Example: '-286Wx359H-' ya '_473x593' ko puri tarah hata dega
+            clean_url = re.sub(r'[-_]?\d+[Ww]?x\d+[Hh]?[-_]?', '', raw_url)
+            
+            clean_url = clean_url.replace('_thumbnail', '')
+            
+            if 'ajio.com' in clean_url: 
+                clean_url = clean_url.split('?')[0]
+                
             return clean_url
-        except: return raw_url
+        except: 
+            return raw_url
 
     def get_browser_options(self, port):
         co = ChromiumOptions()
