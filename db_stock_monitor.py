@@ -138,7 +138,7 @@ class DBStockMonitor:
         conn.commit()
         conn.close()
 
-     def get_clean_image_url(self, raw_url):
+    def get_clean_image_url(self, raw_url):
         if not raw_url: return None
         try:
             # Updated Regex: Ye ab Hyphen (-), Underscore (_), W aur H sab handle karega
