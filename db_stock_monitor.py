@@ -373,10 +373,26 @@ class DBStockMonitor:
                 self.stock_cache[pid] = current_sig
 
             if should_alert:
-                raw_img_url = data.get('selected', {}).get('modelImage', {}).get('url')
+                raw_img_url = None
+                
+                # 1. Product API JSON se direct HD image nikalne ka EXACT Path (Best Method)
+                try:
+                    raw_img_url = data['baseOptions'][0]['options'][0]['modelImage']['url']
+                except Exception:
+                    pass
+                    
+                if not raw_img_url:
+                    try:
+                        raw_img_url = data['baseOptions'][0]['options'][0]['images'][0]['url']
+                    except Exception:
+                        pass
+                
+                # 2. Agar by chance upar wala fail ho jaye, toh fallback
+                if not raw_img_url:
+                    raw_img_url = data.get('selected', {}).get('modelImage', {}).get('url')
                 if not raw_img_url and 'images' in data and data['images']: 
                     raw_img_url = data['images'][0].get('url')
-                    
+
                 hd_img_url = self.get_clean_image_url(raw_img_url)
                 buy_url = f"https://www.sheinindia.in/p/{pid}"
                 
